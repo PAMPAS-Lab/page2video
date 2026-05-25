@@ -1,0 +1,57 @@
+{
+  "mediaId": "mock_media_001",
+  "duration": 45.0,
+  "imageSize": { "w": 1920, "h": 1080 },
+  "emphases": [
+    {
+      "order": 1,
+      "start": 1.0,
+      "end": 8.0,
+      "kind": "text",
+      "bboxNorm": [0.15, 0.20, 0.70, 0.08],
+      "confidence": 0.95,
+      "type": "text-highlight",
+      "keyword": "检索增强生成定义",
+      "scriptSlice": "检索增强生成（RAG）是一种将信息检索与大语言模型结合的..."
+    },
+    {
+      "order": 2,
+      "start": 10.0,
+      "end": 20.0,
+      "kind": "block",
+      "bboxNorm": [0.10, 0.35, 0.80, 0.50],
+      "confidence": 0.72,
+      "type": "glow-pulse",
+      "keyword": "RAG 架构图",
+      "scriptSlice": "上图展示了 RAG 的三层架构..."
+    },
+    {
+      "order": 3,
+      "start": 22.0,
+      "end": 30.0,
+      "kind": "text",
+      "bboxNorm": [0.10, 0.75, 0.80, 0.10],
+      "confidence": 0.91,
+      "type": "text-highlight",
+      "keyword": "检索模块",
+      "scriptSlice": "检索模块负责从知识库中找到相关文档片段..."
+    },
+    {
+      "order": 4,
+      "start": 32.0,
+      "end": 42.0,
+      "kind": "text",
+      "bboxNorm": [0.10, 0.88, 0.80, 0.08],
+      "confidence": 0.88,
+      "type": "keyword-chip",
+      "keyword": "端到端训练",
+      "scriptSlice": "整个系统可以进行端到端的联合训练..."
+    }
+  ],
+  "meta": {
+    "ocrLines": 8,
+    "vlmBlocks": 1,
+    "aggModel": "qwen-plus",
+    "elapsedMs": 12450
+  }
+}

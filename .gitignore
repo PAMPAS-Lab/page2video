@@ -1,0 +1,10 @@
+node_modules/
+.env
+.alikey
+data/
+media/
+tools/output/
+*.mp4
+*.tmp
+.DS_Store
+.qoder/

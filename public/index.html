@@ -1,0 +1,2019 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Static Page to Video</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: { 50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd', 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' },
+            success: { 500: '#22c55e', 600: '#16a34a' },
+            warn: { 500: '#f59e0b', 600: '#d97706' },
+            danger: { 500: '#ef4444', 600: '#dc2626' },
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+    .step-active { border-bottom: 3px solid #2563eb; color: #2563eb; font-weight: 600; }
+    .step-done { border-bottom: 3px solid #22c55e; color: #16a34a; }
+    .step-disabled { opacity: 0.5; cursor: not-allowed; }
+    .drop-zone { border: 2px dashed #94a3b8; transition: all 0.2s; }
+    .drop-zone.dragover { border-color: #3b82f6; background: #eff6ff; }
+    .drop-zone:hover { border-color: #64748b; }
+    .bbox-overlay { position: absolute; pointer-events: none; }
+    .bbox-rect { cursor: pointer; pointer-events: all; transition: all 0.15s; }
+    .bbox-rect:hover { filter: brightness(1.2); }
+    .bbox-rect.selected { filter: brightness(1.3); }
+    .timeline-bar { cursor: pointer; transition: all 0.15s; }
+    .timeline-bar:hover { filter: brightness(1.1); transform: scaleY(1.1); }
+    .timeline-bar.selected { stroke: #1d4ed8; stroke-width: 2; }
+    .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; }
+    .badge-ocr { background: #dbeafe; color: #1d4ed8; }
+    .badge-vlm { background: #fce7f3; color: #be185d; }
+    .badge-text-highlight { background: #fef3c7; color: #92400e; }
+    .badge-glow-pulse { background: #ede9fe; color: #6d28d9; }
+    .badge-keyword-chip { background: #d1fae5; color: #065f46; }
+    .spinner { border: 3px solid #e2e8f0; border-top: 3px solid #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 0.8s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .panel { background: white; border: 1px solid #e2e8f0; border-radius: 12px; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all 0.15s; border: 1px solid transparent; }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-primary:disabled { background: #93c5fd; cursor: not-allowed; }
+    .btn-secondary { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+    .btn-secondary:hover { background: #e2e8f0; }
+    .btn-danger { background: #fee2e2; color: #dc2626; }
+    .btn-danger:hover { background: #fecaca; }
+    .btn-success { background: #22c55e; color: white; }
+    .btn-success:hover { background: #16a34a; }
+    .btn-success:disabled { background: #86efac; cursor: not-allowed; }
+    .input { width: 100%; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.875rem; transition: border-color 0.15s; }
+    .input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+    .textarea { width: 100%; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.875rem; resize: vertical; min-height: 100px; transition: border-color 0.15s; }
+    .textarea:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+    .label { display: block; font-size: 0.875rem; font-weight: 500; color: #374151; margin-bottom: 4px; }
+    .task-item { padding: 10px 12px; border-radius: 8px; cursor: pointer; transition: background 0.15s; border: 1px solid transparent; }
+    .task-item:hover { background: #f8fafc; }
+    .task-item.active { background: #eff6ff; border-color: #bfdbfe; }
+    .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; font-size: 0.875rem; z-index: 9999; animation: slideIn 0.3s ease; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .toast-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .toast-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .toast-info { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+    .editable-row { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 6px; transition: background 0.15s; }
+    .editable-row:hover { background: #f8fafc; }
+    .editable-row.selected { background: #eff6ff; }
+    .img-container { position: relative; display: inline-block; max-width: 100%; }
+    .img-container img { display: block; max-width: 100%; height: auto; }
+    .img-container svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <h1 class="text-xl font-bold text-gray-800">Static Page to Video</h1>
+        <span class="badge bg-gray-100 text-gray-500">v0.1</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="btn btn-secondary" onclick="loadTasks()">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+          Tasks
+        </button>
+        <button class="btn btn-primary" onclick="newTask()">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          New Task
+        </button>
+      </div>
+    </div>
+    <!-- Step Navigation -->
+    <div class="max-w-7xl mx-auto px-4">
+      <nav class="flex gap-0" id="step-nav">
+        <button class="px-4 py-2 text-sm step-active" data-step="upload" onclick="goToStep('upload')">1. Upload</button>
+        <button class="px-4 py-2 text-sm step-disabled" data-step="detect" onclick="goToStep('detect')">2. Detection</button>
+        <button class="px-4 py-2 text-sm step-disabled" data-step="plan" onclick="goToStep('plan')">3. Animation Plan</button>
+        <button class="px-4 py-2 text-sm step-disabled" data-step="render" onclick="goToStep('render')">4. Render & Preview</button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="max-w-7xl mx-auto px-4 py-6" id="main-content">
+    <!-- Step 1: Upload -->
+    <section id="step-upload" class="step-panel">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Image Upload -->
+        <div class="panel p-6">
+          <h2 class="text-lg font-semibold text-gray-800 mb-4">Slide Image</h2>
+          <div class="drop-zone rounded-xl p-8 text-center" id="drop-zone">
+            <div id="upload-placeholder">
+              <svg class="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+              </svg>
+              <p class="text-sm text-gray-500 mb-2">Drag & drop image here, or click to select</p>
+              <p class="text-xs text-gray-400">PNG, JPG, WebP, GIF (max 20MB)</p>
+              <input type="file" id="file-input" class="hidden" accept=".png,.jpg,.jpeg,.webp,.gif,.bmp">
+              <button class="btn btn-secondary mt-4" id="btn-select-file">Select File</button>
+            </div>
+            <div id="upload-preview" class="hidden">
+              <img id="preview-img" class="max-h-64 mx-auto rounded-lg" alt="Preview">
+              <p class="text-sm text-gray-500 mt-2" id="preview-filename"></p>
+              <button class="btn btn-danger mt-2 text-sm" id="btn-remove-image">Remove</button>
+            </div>
+          </div>
+          <div id="upload-progress" class="hidden mt-4">
+            <div class="flex items-center gap-2">
+              <div class="spinner"></div>
+              <span class="text-sm text-gray-600">Uploading...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Script & Settings -->
+        <div class="panel p-6">
+          <h2 class="text-lg font-semibold text-gray-800 mb-4">Script & Settings</h2>
+          <div class="space-y-4">
+            <div>
+              <label class="label">Script Text *</label>
+              <textarea class="textarea" id="script-text" rows="8" placeholder="Enter the narration script for this slide..."></textarea>
+              <p class="text-xs text-gray-400 mt-1" id="char-count">0 characters</p>
+            </div>
+
+            <!-- TTS / Audio Section -->
+            <div class="border border-gray-200 rounded-lg p-4 space-y-3">
+              <h3 class="text-sm font-semibold text-gray-700">Audio Source</h3>
+
+              <!-- TTS Generate -->
+              <div>
+                <button class="btn btn-primary w-full justify-center" id="btn-tts" onclick="generateTTS()" disabled>
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+                  Generate TTS (CosyVoice)
+                </button>
+                <div class="grid grid-cols-2 gap-2 mt-2">
+                  <div>
+                    <label class="label text-xs">Voice</label>
+                    <select class="input text-sm" id="tts-voice">
+                      <option value="longanyang">longanyang (default)</option>
+                      <option value="longxiaochun">longxiaochun</option>
+                      <option value="longxiaoxia">longxiaoxia</option>
+                      <option value="longxiaochen">longxiaochen</option>
+                      <option value="longshu">longshu</option>
+                      <option value="longwan">longwan</option>
+                      <option value="longxiang">longxiang</option>
+                      <option value="longjing">longjing</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="label text-xs">Speed</label>
+                    <select class="input text-sm" id="tts-rate">
+                      <option value="0.8">Slow (0.8x)</option>
+                      <option value="1.0" selected>Normal (1.0x)</option>
+                      <option value="1.2">Fast (1.2x)</option>
+                      <option value="1.5">Very Fast (1.5x)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Divider -->
+              <div class="flex items-center gap-2">
+                <div class="flex-1 border-t border-gray-200"></div>
+                <span class="text-xs text-gray-400">OR</span>
+                <div class="flex-1 border-t border-gray-200"></div>
+              </div>
+
+              <!-- Audio Upload -->
+              <div>
+                <button class="btn btn-secondary w-full justify-center" id="btn-upload-audio" onclick="document.getElementById('audio-input').click()">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>
+                  Upload Audio File
+                </button>
+                <input type="file" id="audio-input" class="hidden" accept=".mp3,.wav,.ogg,.m4a,.flac,.aac">
+                <p class="text-xs text-gray-400 mt-1 text-center">MP3, WAV, OGG, M4A, FLAC (max 50MB)</p>
+              </div>
+
+              <!-- Audio Result -->
+              <div id="audio-result" class="hidden">
+                <div class="flex items-center gap-2 p-2 bg-green-50 rounded-lg">
+                  <svg class="w-4 h-4 text-green-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-xs font-medium text-green-700 truncate" id="audio-source-label"></p>
+                    <p class="text-xs text-green-600" id="audio-duration-label"></p>
+                  </div>
+                  <audio id="audio-preview" controls class="h-8" style="max-width: 200px;"></audio>
+                </div>
+              </div>
+
+              <!-- TTS Progress -->
+              <div id="tts-progress" class="hidden">
+                <div class="flex items-center gap-2 p-2 bg-blue-50 rounded-lg">
+                  <div class="spinner"></div>
+                  <span class="text-xs text-blue-700" id="tts-status-text">Generating TTS...</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Duration (auto-filled, read-only) -->
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="label">Duration (auto) <span class="text-xs text-gray-400">from audio</span></label>
+                <input type="number" class="input bg-gray-50" id="duration" value="" min="3" max="300" step="0.1" readonly placeholder="Auto from TTS/audio">
+              </div>
+              <div>
+                <label class="label">Task ID <span class="text-xs text-gray-400" id="task-id-lock-hint"></span></label>
+                <div class="flex gap-1">
+                  <input type="text" class="input flex-1" id="task-id-input" placeholder="Auto-generated">
+                  <button class="btn btn-secondary text-xs py-1 px-2 hidden" id="btn-unlock-taskid" onclick="unlockTaskId()" title="Unlock to change Task ID (will lose audio association)">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <button class="btn btn-primary w-full justify-center" id="btn-start-detect" onclick="startDetection()" disabled>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              Start Detection (OCR + VLM)
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 2: Detection Editor -->
+    <section id="step-detect" class="step-panel hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Image with BBox Overlay -->
+        <div class="panel p-4 lg:col-span-2">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold text-gray-800">Detection Result</h2>
+            <div class="flex items-center gap-2">
+              <label class="flex items-center gap-1 text-sm">
+                <input type="checkbox" id="show-ocr" checked onchange="renderDetectionOverlay()"> OCR
+              </label>
+              <label class="flex items-center gap-1 text-sm">
+                <input type="checkbox" id="show-vlm" checked onchange="renderDetectionOverlay()"> VLM
+              </label>
+            </div>
+          </div>
+          <div class="bg-gray-100 rounded-lg p-2 overflow-auto" style="max-height: 500px;">
+            <div class="img-container mx-auto" id="detection-img-container">
+              <img id="detection-image" src="" alt="Slide">
+              <svg id="detection-svg" viewBox="0 0 1 1" preserveAspectRatio="none"></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detection List -->
+        <div class="panel p-4 overflow-auto" style="max-height: 580px;">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-gray-700">Elements</h3>
+          </div>
+
+          <!-- VLM Blocks -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">VLM Blocks</h4>
+              <button class="btn btn-secondary text-xs py-0.5 px-2" onclick="addVlmBlock()">+ Add</button>
+            </div>
+            <div id="vlm-blocks-list" class="space-y-1"></div>
+            <div id="vlm-block-detail" class="mt-2"></div>
+          </div>
+
+          <div class="mt-4 pt-4 border-t border-gray-200 space-y-2">
+            <button class="btn btn-secondary w-full justify-center text-sm" onclick="saveDetection()">
+              Save Changes
+            </button>
+            <button class="btn btn-primary w-full justify-center text-sm" onclick="generatePlan()">
+              Generate Animation Plan
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detection Status -->
+      <div id="detect-status" class="panel p-4 mt-4">
+        <div class="flex items-center gap-4 text-sm">
+          <span id="detect-ocr-status" class="badge badge-ocr">OCR: --</span>
+          <span id="detect-vlm-status" class="badge badge-vlm">VLM: --</span>
+          <span class="text-gray-400" id="detect-image-size">Image: --</span>
+          <span class="text-gray-400" id="detect-elapsed">Elapsed: --</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 3: Animation Plan Editor -->
+    <section id="step-plan" class="step-panel hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Plan Timeline + Image -->
+        <div class="panel p-4 lg:col-span-2">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold text-gray-800">Animation Plan</h2>
+            <div class="flex items-center gap-2" id="plan-header-actions">
+              <button class="btn btn-secondary text-xs py-1" id="btn-add-emphasis" onclick="addEmphasis()">+ Add Emphasis</button>
+              <button class="btn btn-danger text-xs py-1 hidden" id="btn-cancel-picker" onclick="cancelEmphasisPicker()">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Image Preview with Plan Overlay -->
+          <div class="bg-gray-100 rounded-lg p-2 mb-4 overflow-auto" style="max-height: 350px;">
+            <div class="img-container mx-auto" id="plan-img-container">
+              <img id="plan-image" src="" alt="Slide">
+              <svg id="plan-svg" viewBox="0 0 1 1" preserveAspectRatio="none"></svg>
+            </div>
+          </div>
+
+          <!-- Timeline -->
+          <div class="border border-gray-200 rounded-lg p-3">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-semibold text-gray-600">Timeline</h3>
+              <span class="text-xs text-gray-400" id="plan-duration-display">Duration: --</span>
+            </div>
+            <!-- Time ruler -->
+            <div class="relative h-6 bg-gray-50 rounded mb-1" id="timeline-ruler"></div>
+            <!-- Emphasis bars -->
+            <div class="relative" id="timeline-bars" style="min-height: 40px;"></div>
+
+            <!-- Audio Playback + ASR Markers -->
+            <div id="audio-timeline-controls" class="mt-3 pt-3 border-t border-gray-100 hidden">
+              <div class="flex items-center gap-2 mb-2">
+                <button class="btn btn-secondary text-xs py-1 px-2" id="btn-audio-play" onclick="toggleAudioPlayback()">
+                  <svg id="audio-play-icon" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                  <span id="audio-play-label">Play</span>
+                </button>
+                <span class="text-xs text-gray-400" id="audio-time-display">0:00 / 0:00</span>
+                <span class="badge bg-purple-100 text-purple-700 text-xs ml-auto" id="asr-source-badge"></span>
+              </div>
+              <!-- Waveform-like track with playhead and sentence markers -->
+              <div class="relative h-8 bg-gray-50 rounded cursor-pointer" id="audio-track" onclick="seekAudio(event)">
+                <div id="audio-playhead" class="absolute top-0 h-full w-0.5 bg-red-500 z-10" style="left:0%;"></div>
+                <div id="sentence-markers" class="absolute inset-0"></div>
+              </div>
+              <audio id="timeline-audio" class="hidden"></audio>
+            </div>
+          </div>
+        </div>
+
+        <!-- Emphasis Editor -->
+        <div class="panel p-4 overflow-auto" style="max-height: 680px;">
+          <h3 class="font-semibold text-gray-700 mb-3">Emphasis Details</h3>
+          <div id="emphasis-editor">
+            <p class="text-sm text-gray-400">Select an emphasis to edit</p>
+          </div>
+          <div class="mt-4 pt-4 border-t border-gray-200 space-y-2">
+            <button class="btn btn-secondary w-full justify-center text-sm" onclick="savePlan()">
+              Save Plan
+            </button>
+            <button class="btn btn-success w-full justify-center text-sm" onclick="confirmPlan()">
+              Confirm Plan
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Plan Meta -->
+      <div id="plan-meta" class="panel p-4 mt-4">
+        <div class="flex items-center gap-4 text-sm flex-wrap">
+          <span class="text-gray-500" id="plan-meta-model">Model: --</span>
+          <span class="text-gray-500" id="plan-meta-emphases">Emphases: --</span>
+          <span class="text-gray-500" id="plan-meta-elapsed">Elapsed: --</span>
+          <span class="text-gray-500" id="plan-meta-fallback"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 4: Render & Preview -->
+    <section id="step-render" class="step-panel hidden">
+      <!-- Side-by-side video comparison -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <!-- Left: Playback (Source) -->
+        <div class="panel p-4">
+          <h3 class="text-sm font-semibold text-gray-600 mb-2">Playback (Source)</h3>
+          <div class="bg-black rounded-lg overflow-hidden" style="min-height:200px;">
+            <video id="playback-player" class="w-full hidden" controls style="max-height:400px;"></video>
+            <div id="playback-placeholder" class="flex items-center justify-center h-48 text-gray-400">
+              <div class="text-center">
+                <div id="playback-spinner" class="spinner mx-auto mb-2 hidden"></div>
+                <p id="playback-status-text" class="text-sm">Generating playback...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Right: Emphasis (Rendered) -->
+        <div class="panel p-4">
+          <h3 class="text-sm font-semibold text-gray-600 mb-2">Emphasis (Rendered)</h3>
+          <div class="bg-black rounded-lg overflow-hidden" style="min-height:200px;">
+            <video id="emphasis-player" class="w-full hidden" controls style="max-height:400px;"></video>
+            <div id="emphasis-placeholder" class="flex items-center justify-center h-48 text-gray-400">
+              <p class="text-sm">Click "Start Rendering" to generate</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Render Controls -->
+      <div class="panel p-4">
+        <div class="flex items-center gap-4 flex-wrap">
+          <button class="btn btn-secondary text-sm" onclick="goToStep('plan')">
+            Back to Edit Plan
+          </button>
+          <div class="flex items-center gap-2">
+            <label class="label text-xs mb-0">Quality:</label>
+            <select class="input text-sm py-1" id="render-quality" style="width:auto;">
+              <option value="draft">Draft</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <button class="btn btn-primary text-sm" id="btn-render" onclick="startRender()">
+            Start Rendering
+          </button>
+          <a id="download-link" class="btn btn-secondary text-sm hidden" download>
+            Download MP4
+          </a>
+          <!-- Status -->
+          <div class="flex items-center gap-2 ml-auto">
+            <div id="render-spinner" class="spinner hidden"></div>
+            <span class="text-sm text-gray-600" id="render-status-text">Ready</span>
+            <span class="text-xs text-gray-400" id="render-status-detail"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Task List Sidebar -->
+  <div id="task-sidebar" class="fixed inset-y-0 right-0 w-80 bg-white border-l border-gray-200 transform translate-x-full transition-transform z-50 overflow-auto">
+    <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+      <h2 class="font-semibold text-gray-800">Tasks</h2>
+      <button class="text-gray-400 hover:text-gray-600" onclick="closeSidebar()">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="task-list" class="p-3 space-y-2">
+      <p class="text-sm text-gray-400 text-center py-8">No tasks yet</p>
+    </div>
+  </div>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black bg-opacity-30 z-40 hidden" onclick="closeSidebar()"></div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <script>
+    // ── State ──────────────────────────────────────────────────
+    const state = {
+      currentStep: 'upload',
+      taskId: null,
+      imagePath: null,
+      imageUrl: null,
+      audioUrl: null,
+      audioPath: null,
+      scriptText: '',
+      duration: 0,
+      detection: null,
+      plan: null,
+      selectedOcrIndex: null,
+      selectedVlmIndex: null,
+      selectedEmphasisIndex: null,
+      pollTimer: null,
+      sentenceAnchors: null,
+      audioPlaying: false,
+      playbackUrl: null,
+      emphasisPickerMode: false,
+    };
+
+    // ── API Helpers ────────────────────────────────────────────
+    async function api(method, url, body) {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body && method !== 'GET') opts.body = JSON.stringify(body);
+      const res = await fetch(url, opts);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    }
+
+    // ── Toast ──────────────────────────────────────────────────
+    function toast(msg, type = 'info') {
+      const el = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.textContent = msg;
+      document.getElementById('toast-container').appendChild(el);
+      setTimeout(() => el.remove(), 4000);
+    }
+
+    // ── Step Navigation ────────────────────────────────────────
+    function goToStep(step) {
+      const steps = ['upload', 'detect', 'plan', 'render'];
+      const currentIdx = steps.indexOf(state.currentStep);
+      const targetIdx = steps.indexOf(step);
+
+      // Allow going back or to current+1 if unlocked
+      if (targetIdx > currentIdx + 1) return;
+
+      // Block forward navigation if required data is missing
+      if (step === 'detect' && !state.detection) return;
+      if (step === 'plan' && !state.plan) return;
+      if (step === 'render' && !state.plan) return;
+
+      state.currentStep = step;
+      document.querySelectorAll('.step-panel').forEach(p => p.classList.add('hidden'));
+      document.getElementById(`step-${step}`).classList.remove('hidden');
+
+      document.querySelectorAll('#step-nav button').forEach(btn => {
+        const btnStep = btn.dataset.step;
+        const btnIdx = steps.indexOf(btnStep);
+        btn.className = 'px-4 py-2 text-sm';
+        if (btnIdx < targetIdx) btn.className += ' step-done';
+        else if (btnIdx === targetIdx) btn.className += ' step-active';
+        else {
+          // Mark future steps as disabled unless their data is ready
+          const hasData = (btnStep === 'detect' && state.detection)
+            || (btnStep === 'plan' && state.plan)
+            || (btnStep === 'render' && state.plan);
+          btn.className += hasData ? ' step-done' : ' step-disabled';
+        }
+      });
+
+      if (step === 'detect' && state.detection) renderDetectionView();
+      if (step === 'plan' && state.plan) renderPlanView();
+    }
+
+    function unlockStep(step) {
+      const steps = ['upload', 'detect', 'plan', 'render'];
+      const targetIdx = steps.indexOf(step);
+      const btn = document.querySelector(`#step-nav button[data-step="${step}"]`);
+      if (btn) btn.className = 'px-4 py-2 text-sm step-done';
+    }
+
+    // ── Image Upload ───────────────────────────────────────────
+    let dragCounter = 0;
+
+    function initDropZone() {
+      const dropZone = document.getElementById('drop-zone');
+      const fileInput = document.getElementById('file-input');
+      const btnSelect = document.getElementById('btn-select-file');
+      const btnRemove = document.getElementById('btn-remove-image');
+
+      btnSelect.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        fileInput.click();
+      });
+
+      btnRemove.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        clearImage();
+      });
+
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+          uploadImage(e.target.files[0]);
+        }
+      });
+
+      dropZone.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter++;
+        dropZone.classList.add('dragover');
+      });
+
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+
+      dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter--;
+        if (dragCounter <= 0) {
+          dragCounter = 0;
+          dropZone.classList.remove('dragover');
+        }
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter = 0;
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          uploadImage(e.dataTransfer.files[0]);
+        }
+      });
+    }
+
+    async function uploadImage(file) {
+      // Validate file type client-side
+      const allowedExts = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'];
+      const ext = '.' + file.name.split('.').pop().toLowerCase();
+      if (!allowedExts.includes(ext)) {
+        toast(`Unsupported file type: ${ext}. Please use PNG, JPG, WebP, GIF or BMP.`, 'error');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const progressEl = document.getElementById('upload-progress');
+      const placeholderEl = document.getElementById('upload-placeholder');
+      const previewEl = document.getElementById('upload-preview');
+
+      progressEl.classList.remove('hidden');
+      placeholderEl.classList.add('hidden');
+      previewEl.classList.add('hidden');
+
+      try {
+        const res = await fetch('/api/v1/upload/image', { method: 'POST', body: formData });
+        let data;
+        try {
+          data = await res.json();
+        } catch (parseErr) {
+          throw new Error(`Server returned non-JSON response (HTTP ${res.status})`);
+        }
+        if (!res.ok) {
+          throw new Error(data.error || `Server error (HTTP ${res.status})`);
+        }
+
+        state.imagePath = data.imagePath;
+        state.imageUrl = data.imageUrl;
+
+        // Show preview
+        const previewImg = document.getElementById('preview-img');
+        previewImg.onload = () => {
+          progressEl.classList.add('hidden');
+          previewEl.classList.remove('hidden');
+        };
+        previewImg.onerror = () => {
+          progressEl.classList.add('hidden');
+          previewEl.classList.remove('hidden');
+        };
+        previewImg.src = state.imageUrl;
+        document.getElementById('preview-filename').textContent =
+          `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+
+        // Reset file input so same file can be re-selected
+        document.getElementById('file-input').value = '';
+
+        updateStartButton();
+        toast('Image uploaded successfully', 'success');
+      } catch (err) {
+        toast(`Upload failed: ${err.message}`, 'error');
+        progressEl.classList.add('hidden');
+        if (!state.imagePath) {
+          placeholderEl.classList.remove('hidden');
+        } else {
+          previewEl.classList.remove('hidden');
+        }
+      }
+    }
+
+    function clearImage() {
+      state.imagePath = null;
+      state.imageUrl = null;
+      document.getElementById('upload-preview').classList.add('hidden');
+      document.getElementById('upload-placeholder').classList.remove('hidden');
+      document.getElementById('file-input').value = '';
+      updateStartButton();
+    }
+
+    // ── Script & Controls ──────────────────────────────────────
+    document.getElementById('script-text').addEventListener('input', function() {
+      state.scriptText = this.value;
+      document.getElementById('char-count').textContent = `${this.value.length} characters`;
+      updateStartButton();
+      updateTTSButton();
+    });
+
+    // Audio input file handler
+    document.getElementById('audio-input').addEventListener('change', async function(e) {
+      if (!e.target.files || e.target.files.length === 0) return;
+      await uploadAudio(e.target.files[0]);
+    });
+
+    function updateStartButton() {
+      const btn = document.getElementById('btn-start-detect');
+      const hasAudio = state.duration > 0;
+      btn.disabled = !(state.imagePath && state.scriptText.trim() && hasAudio);
+    }
+
+    function updateTTSButton() {
+      const btn = document.getElementById('btn-tts');
+      btn.disabled = !state.scriptText.trim();
+    }
+
+    function lockTaskId() {
+      const input = document.getElementById('task-id-input');
+      const unlockBtn = document.getElementById('btn-unlock-taskid');
+      const hint = document.getElementById('task-id-lock-hint');
+      input.readOnly = true;
+      input.classList.add('bg-gray-50');
+      unlockBtn.classList.remove('hidden');
+      hint.textContent = '(locked)';
+    }
+
+    function unlockTaskId() {
+      const input = document.getElementById('task-id-input');
+      const unlockBtn = document.getElementById('btn-unlock-taskid');
+      const hint = document.getElementById('task-id-lock-hint');
+      input.readOnly = false;
+      input.classList.remove('bg-gray-50');
+      unlockBtn.classList.add('hidden');
+      hint.textContent = '';
+      // Clear audio association since user is changing ID
+      state.audioPath = null;
+      state.audioUrl = null;
+      state.duration = 0;
+      document.getElementById('duration').value = '';
+      document.getElementById('audio-result').classList.add('hidden');
+      toast('Task ID unlocked. Please re-upload audio or regenerate TTS.', 'info');
+      updateStartButton();
+    }
+
+    // ── TTS Generation ─────────────────────────────────────────
+    async function generateTTS() {
+      const text = state.scriptText;
+      if (!text || !text.trim()) {
+        toast('Please enter script text first', 'error');
+        return;
+      }
+
+      const voice = document.getElementById('tts-voice').value;
+      const rate = document.getElementById('tts-rate').value;
+
+      const btn = document.getElementById('btn-tts');
+      const progress = document.getElementById('tts-progress');
+      const statusText = document.getElementById('tts-status-text');
+
+      btn.disabled = true;
+      progress.classList.remove('hidden');
+      statusText.textContent = 'Generating TTS audio...';
+
+      try {
+        const taskId = document.getElementById('task-id-input').value.trim() ||
+                       `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        document.getElementById('task-id-input').value = taskId;
+
+        const data = await api('POST', '/api/v1/tts', {
+          text,
+          voice,
+          rate,
+          taskId,
+        });
+
+        state.duration = data.duration;
+        state.audioUrl = data.audioUrl;
+        state.taskId = data.taskId;
+
+        document.getElementById('duration').value = data.duration.toFixed(1);
+        showAudioResult(data.audioUrl, data.duration, `TTS (${data.voice})`);
+        statusText.textContent = 'TTS complete!';
+        setTimeout(() => progress.classList.add('hidden'), 1500);
+
+        toast(`TTS generated: ${data.duration.toFixed(1)}s`, 'success');
+        lockTaskId();
+        updateStartButton();
+      } catch (err) {
+        toast(`TTS failed: ${err.message}`, 'error');
+        statusText.textContent = `TTS failed: ${err.message}`;
+      } finally {
+        btn.disabled = false;
+        updateTTSButton();
+      }
+    }
+
+    // ── Audio Upload ───────────────────────────────────────────
+    async function uploadAudio(file) {
+      const formData = new FormData();
+      formData.append('audio', file);
+
+      const progress = document.getElementById('tts-progress');
+      const statusText = document.getElementById('tts-status-text');
+
+      progress.classList.remove('hidden');
+      statusText.textContent = 'Uploading audio...';
+
+      try {
+        const res = await fetch('/api/v1/upload/audio', { method: 'POST', body: formData });
+        let data;
+        try { data = await res.json(); } catch (_) { throw new Error(`HTTP ${res.status}`); }
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+        state.duration = data.duration;
+        state.audioUrl = data.audioUrl;
+        state.audioPath = data.audioPath;  // Store server-side path for task creation
+
+        document.getElementById('duration').value = data.duration.toFixed(1);
+        showAudioResult(data.audioUrl, data.duration, file.name);
+
+        progress.classList.add('hidden');
+        toast(`Audio uploaded: ${data.duration.toFixed(1)}s`, 'success');
+        lockTaskId();
+        updateStartButton();
+      } catch (err) {
+        toast(`Audio upload failed: ${err.message}`, 'error');
+        progress.classList.add('hidden');
+      }
+    }
+
+    function showAudioResult(audioUrl, duration, label) {
+      const resultEl = document.getElementById('audio-result');
+      const audioPreview = document.getElementById('audio-preview');
+      const sourceLabel = document.getElementById('audio-source-label');
+      const durationLabel = document.getElementById('audio-duration-label');
+
+      resultEl.classList.remove('hidden');
+      audioPreview.src = audioUrl;
+      sourceLabel.textContent = label;
+      durationLabel.textContent = `Duration: ${duration.toFixed(1)}s`;
+    }
+
+    // ── Detection ──────────────────────────────────────────────
+    async function startDetection() {
+      if (!state.imagePath || !state.scriptText.trim()) {
+        toast('Please upload an image and enter script text', 'error');
+        return;
+      }
+
+      const taskId = document.getElementById('task-id-input').value.trim() ||
+                     `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      state.taskId = taskId;
+
+      const btn = document.getElementById('btn-start-detect');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> Detecting...';
+
+      try {
+        const data = await api('POST', `/api/v1/task/${taskId}/detect`, {
+          imagePath: state.imagePath,
+          scriptText: state.scriptText,
+          duration: state.duration,
+          audioPath: state.audioPath || undefined,
+          audioUrl: state.audioUrl || undefined,
+        });
+
+        state.detection = data.detection;
+        unlockStep('detect');
+
+        // VLM 失败时显示警告
+        if (data.detection?.errors?.vlmFailed) {
+          toast(`VLM 检测失败: ${data.detection.errors.vlmError || '未知错误'}`, 'error');
+        }
+        // OCR 失败时显示警告
+        if (data.detection?.errors?.ocrFailed) {
+          toast(`OCR 检测失败: ${data.detection.errors.ocrError || '未知错误'}`, 'error');
+        }
+
+        // Switch to detection view
+        goToStep('detect');
+        renderDetectionView();
+        toast('Detection completed', 'success');
+      } catch (err) {
+        toast(`Detection failed: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Start Detection (OCR + VLM)';
+        updateStartButton();
+      }
+    }
+
+    function renderDetectionView() {
+      if (!state.detection) return;
+      const det = state.detection;
+
+      // Set image
+      document.getElementById('detection-image').src = state.imageUrl;
+
+      // Status badges
+      const ocrStatus = document.getElementById('detect-ocr-status');
+      ocrStatus.textContent = det.errors?.ocrFailed ? `OCR: Failed` : `OCR: ${det.ocrLines?.length || 0} lines`;
+      ocrStatus.className = det.errors?.ocrFailed ? 'badge bg-red-100 text-red-700' : 'badge badge-ocr';
+      ocrStatus.title = det.errors?.ocrError || '';
+
+      const vlmStatus = document.getElementById('detect-vlm-status');
+      vlmStatus.textContent = det.errors?.vlmFailed ? `VLM: Failed` : `VLM: ${det.vlmBlocks?.length || 0} blocks`;
+      vlmStatus.className = det.errors?.vlmFailed ? 'badge bg-red-100 text-red-700' : 'badge badge-vlm';
+      vlmStatus.title = det.errors?.vlmError || '';
+
+      document.getElementById('detect-image-size').textContent =
+        `Image: ${det.imageSize?.w || '?'}x${det.imageSize?.h || '?'}`;
+
+      // Render lists
+      renderVlmBlocksList();
+      renderDetectionOverlay();
+    }
+
+    function renderDetectionOverlay() {
+      if (!state.detection) return;
+      const svg = document.getElementById('detection-svg');
+      svg.innerHTML = '';
+
+      const showOcr = document.getElementById('show-ocr').checked;
+      const showVlm = document.getElementById('show-vlm').checked;
+
+      if (showOcr) {
+        (state.detection.ocrLines || []).forEach((line, i) => {
+          const [x, y, w, h] = line.bboxNorm;
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          rect.setAttribute('x', x); rect.setAttribute('y', y);
+          rect.setAttribute('width', w); rect.setAttribute('height', h);
+          rect.setAttribute('fill', 'rgba(59,130,246,0.08)');
+          rect.setAttribute('stroke', '#93c5fd');
+          rect.setAttribute('stroke-width', '0.0015');
+          rect.setAttribute('rx', '0.003');
+
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', x + 0.003); text.setAttribute('y', y - 0.005);
+          text.setAttribute('font-size', '0.014'); text.setAttribute('fill', '#60a5fa');
+          text.setAttribute('font-family', 'sans-serif');
+          text.textContent = `T${i + 1}`;
+
+          svg.appendChild(rect);
+          svg.appendChild(text);
+        });
+      }
+
+      if (showVlm) {
+        (state.detection.vlmBlocks || []).forEach((block, i) => {
+          const [x, y, w, h] = block.bboxNorm;
+          const selected = state.selectedVlmIndex === i;
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          rect.setAttribute('x', x); rect.setAttribute('y', y);
+          rect.setAttribute('width', w); rect.setAttribute('height', h);
+          rect.setAttribute('fill', selected ? 'rgba(236,72,153,0.25)' : 'rgba(236,72,153,0.12)');
+          rect.setAttribute('stroke', selected ? '#be185d' : '#ec4899');
+          rect.setAttribute('stroke-width', selected ? '0.004' : '0.002');
+          rect.setAttribute('rx', '0.005');
+          rect.setAttribute('stroke-dasharray', '0.008 0.004');
+          rect.style.cursor = 'move';
+          rect.style.pointerEvents = 'all';
+          rect.classList.add('bbox-rect');
+          if (selected) rect.classList.add('selected');
+          rect.addEventListener('mousedown', (evt) => startVlmDrag(evt, i));
+
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', x + 0.003); text.setAttribute('y', y - 0.005);
+          text.setAttribute('font-size', '0.018'); text.setAttribute('fill', '#be185d');
+          text.setAttribute('font-family', 'sans-serif');
+          text.style.pointerEvents = 'none';
+          text.textContent = `V${i + 1}`;
+
+          svg.appendChild(rect);
+          svg.appendChild(text);
+
+          // Resize handles for selected block
+          if (selected) {
+            const hs = 0.012;
+            const corners = [
+              { id: 'nw', cx: x, cy: y, cur: 'nwse-resize' },
+              { id: 'ne', cx: x + w, cy: y, cur: 'nesw-resize' },
+              { id: 'sw', cx: x, cy: y + h, cur: 'nesw-resize' },
+              { id: 'se', cx: x + w, cy: y + h, cur: 'nwse-resize' },
+            ];
+            corners.forEach(c => {
+              const handle = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+              handle.setAttribute('x', c.cx - hs / 2);
+              handle.setAttribute('y', c.cy - hs / 2);
+              handle.setAttribute('width', hs);
+              handle.setAttribute('height', hs);
+              handle.setAttribute('fill', '#be185d');
+              handle.setAttribute('stroke', 'white');
+              handle.setAttribute('stroke-width', '0.002');
+              handle.setAttribute('rx', '0.002');
+              handle.style.cursor = c.cur;
+              handle.style.pointerEvents = 'all';
+              handle.addEventListener('mousedown', (evt) => startVlmDrag(evt, i, c.id));
+              svg.appendChild(handle);
+            });
+          }
+        });
+      }
+    }
+
+    // ── VLM Block Drag ──
+    let vlmDragState = null;
+
+    function startVlmDrag(evt, blockIndex, resizeCorner) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const svg = document.getElementById('detection-svg');
+      const pt = svg.createSVGPoint();
+      pt.x = evt.clientX;
+      pt.y = evt.clientY;
+      const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+
+      const block = state.detection.vlmBlocks[blockIndex];
+      vlmDragState = {
+        blockIndex,
+        startClientX: evt.clientX,
+        startClientY: evt.clientY,
+        startSvgX: svgP.x,
+        startSvgY: svgP.y,
+        origBbox: [...block.bboxNorm],
+        moved: false,
+        resizeCorner: resizeCorner || null,
+      };
+
+      document.addEventListener('mousemove', onVlmDragMove);
+      document.addEventListener('mouseup', onVlmDragEnd);
+    }
+
+    function onVlmDragMove(evt) {
+      if (!vlmDragState) return;
+      evt.preventDefault();
+      const dx = evt.clientX - vlmDragState.startClientX;
+      const dy = evt.clientY - vlmDragState.startClientY;
+      if (!vlmDragState.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+      vlmDragState.moved = true;
+
+      const svg = document.getElementById('detection-svg');
+      const pt = svg.createSVGPoint();
+      pt.x = evt.clientX;
+      pt.y = evt.clientY;
+      const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+
+      const sdx = svgP.x - vlmDragState.startSvgX;
+      const sdy = svgP.y - vlmDragState.startSvgY;
+      const [ox, oy, ow, oh] = vlmDragState.origBbox;
+      const MIN = 0.02;
+
+      let newBbox;
+      const corner = vlmDragState.resizeCorner;
+      if (corner) {
+        let nx = ox, ny = oy, nw = ow, nh = oh;
+        if (corner === 'se') {
+          nw = Math.max(MIN, Math.min(1 - ox, ow + sdx));
+          nh = Math.max(MIN, Math.min(1 - oy, oh + sdy));
+        } else if (corner === 'sw') {
+          const x2 = Math.max(0, Math.min(ox + ow - MIN, ox + sdx));
+          nw = ow - (x2 - ox); nx = x2;
+          nh = Math.max(MIN, Math.min(1 - oy, oh + sdy));
+        } else if (corner === 'ne') {
+          nw = Math.max(MIN, Math.min(1 - ox, ow + sdx));
+          const y2 = Math.max(0, Math.min(oy + oh - MIN, oy + sdy));
+          nh = oh - (y2 - oy); ny = y2;
+        } else if (corner === 'nw') {
+          const x2 = Math.max(0, Math.min(ox + ow - MIN, ox + sdx));
+          nw = ow - (x2 - ox); nx = x2;
+          const y2 = Math.max(0, Math.min(oy + oh - MIN, oy + sdy));
+          nh = oh - (y2 - oy); ny = y2;
+        }
+        newBbox = [Number(nx.toFixed(4)), Number(ny.toFixed(4)), Number(nw.toFixed(4)), Number(nh.toFixed(4))];
+      } else {
+        const newX = Math.max(0, Math.min(1 - ow, ox + sdx));
+        const newY = Math.max(0, Math.min(1 - oh, oy + sdy));
+        newBbox = [Number(newX.toFixed(4)), Number(newY.toFixed(4)), ow, oh];
+      }
+
+      state.detection.vlmBlocks[vlmDragState.blockIndex].bboxNorm = newBbox;
+      renderDetectionOverlay();
+    }
+
+    function onVlmDragEnd() {
+      if (!vlmDragState) return;
+      const blockIndex = vlmDragState.blockIndex;
+      vlmDragState = null;
+      document.removeEventListener('mousemove', onVlmDragMove);
+      document.removeEventListener('mouseup', onVlmDragEnd);
+
+      state.selectedVlmIndex = blockIndex;
+      state.selectedOcrIndex = null;
+      renderDetectionView();
+    }
+
+    function renderVlmBlocksList() {
+      const container = document.getElementById('vlm-blocks-list');
+      const blocks = state.detection?.vlmBlocks || [];
+      if (!blocks.length) {
+        container.innerHTML = '<p class="text-xs text-gray-400 py-2">No VLM blocks detected</p>';
+      } else {
+        container.innerHTML = blocks.map((block, i) => `
+          <div class="editable-row ${state.selectedVlmIndex === i ? 'selected' : ''}" onclick="state.selectedVlmIndex=${i}; state.selectedOcrIndex=null; renderDetectionView();">
+            <span class="badge badge-vlm text-xs shrink-0">V${i + 1}</span>
+            <span class="text-xs text-gray-600 flex-1 truncate" title="${escHtml(block.description)}">${escHtml(block.description)}</span>
+            <span class="text-xs text-gray-400">${block.kind || 'block'}</span>
+          </div>
+        `).join('');
+      }
+      renderVlmBlockDetail();
+    }
+
+    function renderVlmBlockDetail() {
+      const container = document.getElementById('vlm-block-detail');
+      const blocks = state.detection?.vlmBlocks || [];
+      const idx = state.selectedVlmIndex;
+      if (idx === null || idx < 0 || idx >= blocks.length) {
+        container.innerHTML = '';
+        return;
+      }
+      const block = blocks[idx];
+      const kinds = ['image','chart','table','formula','diagram','other'];
+      container.innerHTML = `
+        <div class="p-3 bg-pink-50 rounded-lg space-y-2 border border-pink-200">
+          <div class="flex items-center justify-between">
+            <span class="badge badge-vlm">V${idx + 1}</span>
+            <button class="text-red-400 hover:text-red-600 text-xs font-medium" onclick="removeVlmBlock(${idx})">Delete</button>
+          </div>
+          <div>
+            <label class="label text-xs">Description</label>
+            <input class="input text-sm" value="${escHtml(block.description)}"
+                   onchange="state.detection.vlmBlocks[${idx}].description=this.value">
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="label text-xs">Kind</label>
+              <select class="input text-sm" onchange="state.detection.vlmBlocks[${idx}].kind=this.value; renderDetectionView();">
+                ${kinds.map(k => `<option value="${k}" ${block.kind === k ? 'selected' : ''}>${k}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="label text-xs">Confidence</label>
+              <input type="number" class="input text-sm" step="0.01" min="0" max="1" value="${block.confidence}"
+                     onchange="state.detection.vlmBlocks[${idx}].confidence=parseFloat(this.value)">
+            </div>
+          </div>
+          <div>
+            <label class="label text-xs">BBox [x, y, w, h] <span class="text-gray-400">(px)</span></label>
+            <div class="grid grid-cols-4 gap-1">
+              ${[0,1,2,3].map(j => {
+                const imgW = state.detection?.imageSize?.w || 1920;
+                const imgH = state.detection?.imageSize?.h || 1080;
+                const scale = (j === 0 || j === 2) ? imgW : imgH;
+                const pxVal = Math.round(block.bboxNorm[j] * scale);
+                const maxVal = (j === 0 || j === 2) ? imgW : imgH;
+                return `<input type="number" class="input text-xs" step="1" min="0" max="${maxVal}"
+                       value="${pxVal}"
+                       onchange="state.detection.vlmBlocks[${idx}].bboxNorm[${j}]=parseFloat(this.value)/${scale}; renderDetectionOverlay();">`;
+              }).join('')}
+            </div>
+            <div class="grid grid-cols-4 gap-1 mt-0.5">
+              <span class="text-xs text-gray-400 text-center">x</span>
+              <span class="text-xs text-gray-400 text-center">y</span>
+              <span class="text-xs text-gray-400 text-center">w</span>
+              <span class="text-xs text-gray-400 text-center">h</span>
+            </div>
+          </div>
+          <p class="text-xs text-gray-400">Tip: drag the box on the image to move it</p>
+        </div>
+      `;
+    }
+
+    function addVlmBlock() {
+      if (!state.detection) return;
+      if (!state.detection.vlmBlocks) state.detection.vlmBlocks = [];
+      state.detection.vlmBlocks.push({
+        id: `v${state.detection.vlmBlocks.length + 1}`,
+        kind: 'other',
+        bboxNorm: [0.2, 0.2, 0.3, 0.3],
+        description: 'New block',
+        confidence: 0.5,
+      });
+      state.selectedVlmIndex = state.detection.vlmBlocks.length - 1;
+      renderDetectionView();
+    }
+
+    function removeVlmBlock(i) {
+      state.detection.vlmBlocks.splice(i, 1);
+      state.selectedVlmIndex = null;
+      renderDetectionView();
+    }
+
+    async function saveDetection() {
+      if (!state.taskId || !state.detection) { toast('No detection data to save', 'error'); return; }
+      try {
+        await api('PUT', `/api/v1/task/${state.taskId}/detection`, {
+          ocrLines: state.detection.ocrLines,
+          vlmBlocks: state.detection.vlmBlocks,
+          imageSize: state.detection.imageSize,
+        });
+        toast('Detection saved', 'success');
+      } catch (err) {
+        toast(`Save failed: ${err.message}`, 'error');
+      }
+    }
+
+    // ── Plan Generation ────────────────────────────────────────
+    async function generatePlan() {
+      if (!state.taskId) { toast('No task ID', 'error'); return; }
+
+      const btn = document.querySelector('[onclick="generatePlan()"]');
+      const origHtml = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> Generating...';
+      }
+
+      try {
+        // Save detection first
+        await saveDetection();
+
+        const data = await api('POST', `/api/v1/task/${state.taskId}/plan`, {
+          scriptText: state.scriptText,
+          duration: state.duration,
+        });
+
+        state.plan = data.plan;
+        state.sentenceAnchors = data.sentenceAnchors || null;
+        unlockStep('plan');
+        goToStep('plan');
+        renderPlanView();
+        toast('Animation plan generated', 'success');
+      } catch (err) {
+        toast(`Plan generation failed: ${err.message}`, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      }
+    }
+
+    function renderPlanView() {
+      if (!state.plan) return;
+      const plan = state.plan;
+
+      // Image
+      document.getElementById('plan-image').src = state.imageUrl;
+      document.getElementById('plan-duration-display').textContent = `Duration: ${plan.duration}s`;
+
+      // Meta
+      document.getElementById('plan-meta-model').textContent = `Model: ${plan.meta?.aggModel || '--'}`;
+      document.getElementById('plan-meta-emphases').textContent = `Emphases: ${plan.emphases?.length || 0}`;
+      document.getElementById('plan-meta-elapsed').textContent = `Elapsed: ${plan.meta?.elapsedMs ? (plan.meta.elapsedMs / 1000).toFixed(1) + 's' : '--'}`;
+      document.getElementById('plan-meta-fallback').textContent = plan.meta?.fallback ? '(Fallback plan)' : '';
+
+      // Picker mode UI
+      const addBtn = document.getElementById('btn-add-emphasis');
+      const cancelBtn = document.getElementById('btn-cancel-picker');
+      if (state.emphasisPickerMode) {
+        addBtn.classList.add('hidden');
+        cancelBtn.classList.remove('hidden');
+      } else {
+        addBtn.classList.remove('hidden');
+        cancelBtn.classList.add('hidden');
+      }
+
+      renderPlanOverlay();
+      renderTimeline();
+      renderEmphasisEditor();
+      renderAudioTimeline();
+    }
+
+    function renderPlanOverlay() {
+      const svg = document.getElementById('plan-svg');
+      svg.innerHTML = '';
+
+      // ── Picker mode: show detection boxes for selection ──
+      if (state.emphasisPickerMode && state.detection) {
+        // Draw OCR boxes (blue, clickable)
+        (state.detection.ocrLines || []).forEach((line, i) => {
+          const [x, y, w, h] = line.bboxNorm;
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          rect.setAttribute('x', x); rect.setAttribute('y', y);
+          rect.setAttribute('width', w); rect.setAttribute('height', h);
+          rect.setAttribute('fill', 'rgba(59,130,246,0.15)');
+          rect.setAttribute('stroke', '#3b82f6');
+          rect.setAttribute('stroke-width', '0.003');
+          rect.setAttribute('rx', '0.003');
+          rect.style.cursor = 'pointer';
+          rect.style.pointerEvents = 'all';
+          rect.addEventListener('click', () => addEmphasisFromBox('ocr', i));
+          rect.addEventListener('mouseenter', () => { rect.setAttribute('fill', 'rgba(59,130,246,0.35)'); rect.setAttribute('stroke-width', '0.005'); });
+          rect.addEventListener('mouseleave', () => { rect.setAttribute('fill', 'rgba(59,130,246,0.15)'); rect.setAttribute('stroke-width', '0.003'); });
+
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', x + 0.003); text.setAttribute('y', y - 0.005);
+          text.setAttribute('font-size', '0.014'); text.setAttribute('fill', '#2563eb');
+          text.setAttribute('font-family', 'sans-serif');
+          text.style.pointerEvents = 'none';
+          text.textContent = `T${i + 1}: ${(line.text || '').slice(0, 12)}`;
+
+          svg.appendChild(rect);
+          svg.appendChild(text);
+        });
+
+        // Draw VLM boxes (pink, clickable)
+        (state.detection.vlmBlocks || []).forEach((block, i) => {
+          const [x, y, w, h] = block.bboxNorm;
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          rect.setAttribute('x', x); rect.setAttribute('y', y);
+          rect.setAttribute('width', w); rect.setAttribute('height', h);
+          rect.setAttribute('fill', 'rgba(236,72,153,0.15)');
+          rect.setAttribute('stroke', '#ec4899');
+          rect.setAttribute('stroke-width', '0.003');
+          rect.setAttribute('rx', '0.005');
+          rect.setAttribute('stroke-dasharray', '0.008 0.004');
+          rect.style.cursor = 'pointer';
+          rect.style.pointerEvents = 'all';
+          rect.addEventListener('click', () => addEmphasisFromBox('vlm', i));
+          rect.addEventListener('mouseenter', () => { rect.setAttribute('fill', 'rgba(236,72,153,0.35)'); rect.setAttribute('stroke-width', '0.005'); });
+          rect.addEventListener('mouseleave', () => { rect.setAttribute('fill', 'rgba(236,72,153,0.15)'); rect.setAttribute('stroke-width', '0.003'); });
+
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', x + 0.003); text.setAttribute('y', y - 0.005);
+          text.setAttribute('font-size', '0.014'); text.setAttribute('fill', '#be185d');
+          text.setAttribute('font-family', 'sans-serif');
+          text.style.pointerEvents = 'none';
+          text.textContent = `V${i + 1}: ${(block.description || '').slice(0, 12)}`;
+
+          svg.appendChild(rect);
+          svg.appendChild(text);
+        });
+        return;
+      }
+
+      // ── Normal mode: show emphasis boxes ──
+      const emphases = state.plan?.emphases || [];
+
+      const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899'];
+
+      emphases.forEach((emp, i) => {
+        const [x, y, w, h] = emp.bboxNorm;
+        const color = colors[i % colors.length];
+        const selected = state.selectedEmphasisIndex === i;
+
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', x); rect.setAttribute('y', y);
+        rect.setAttribute('width', w); rect.setAttribute('height', h);
+        rect.setAttribute('fill', selected ? `${color}33` : `${color}1a`);
+        rect.setAttribute('stroke', color);
+        rect.setAttribute('stroke-width', selected ? '0.005' : '0.003');
+        rect.setAttribute('rx', '0.004');
+        rect.classList.add('bbox-rect');
+        if (selected) rect.classList.add('selected');
+        rect.onclick = () => { state.selectedEmphasisIndex = i; renderPlanView(); };
+
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('x', x + 0.005); label.setAttribute('y', y - 0.008);
+        label.setAttribute('font-size', '0.022'); label.setAttribute('fill', color);
+        label.setAttribute('font-weight', 'bold'); label.setAttribute('font-family', 'sans-serif');
+        label.textContent = `#${emp.order} ${emp.keyword || emp.type}`;
+
+        svg.appendChild(rect);
+        svg.appendChild(label);
+      });
+    }
+
+    function renderTimeline() {
+      const plan = state.plan;
+      if (!plan) return;
+      const duration = plan.duration || 30;
+      const emphases = plan.emphases || [];
+
+      // Ruler
+      const ruler = document.getElementById('timeline-ruler');
+      const ticks = Math.min(20, Math.ceil(duration));
+      let rulerHtml = '';
+      for (let t = 0; t <= ticks; t++) {
+        const sec = (t / ticks) * duration;
+        const pct = (t / ticks) * 100;
+        rulerHtml += `<span class="absolute text-xs text-gray-400" style="left:${pct}%;top:2px;transform:translateX(-50%)">${sec.toFixed(0)}s</span>`;
+      }
+      ruler.innerHTML = rulerHtml;
+
+      // Bars
+      const barsContainer = document.getElementById('timeline-bars');
+      const colors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899'];
+      barsContainer.innerHTML = emphases.map((emp, i) => {
+        const left = (emp.start / duration) * 100;
+        const width = ((emp.end - emp.start) / duration) * 100;
+        const color = colors[i % colors.length];
+        const selected = state.selectedEmphasisIndex === i;
+        return `<div class="timeline-bar rounded ${selected ? 'selected' : ''}"
+                     style="position:relative;height:28px;margin-bottom:4px;margin-left:${left.toFixed(1)}%;width:${width.toFixed(1)}%;background:${color}22;border-left:3px solid ${color};padding-left:8px;display:flex;align-items:center;cursor:pointer;overflow:hidden;white-space:nowrap;min-width:60px;"
+                     onclick="state.selectedEmphasisIndex=${i}; renderPlanView();">
+                  <span class="text-xs font-medium" style="color:${color}">#${emp.order} ${emp.type}</span>
+                  <span class="text-xs text-gray-400 ml-2">${emp.start.toFixed(1)}s - ${emp.end.toFixed(1)}s</span>
+                  ${emp.keyword ? `<span class="text-xs text-gray-500 ml-2">[${escHtml(emp.keyword)}]</span>` : ''}
+                </div>`;
+      }).join('');
+    }
+
+    // ── Audio Timeline (TTS + ASR markers) ────────────────────
+    function renderAudioTimeline() {
+      const controls = document.getElementById('audio-timeline-controls');
+      if (!state.audioUrl || !state.plan) {
+        controls.classList.add('hidden');
+        return;
+      }
+      controls.classList.remove('hidden');
+
+      // Set audio source
+      const audio = document.getElementById('timeline-audio');
+      if (!audio.src.endsWith(state.audioUrl)) {
+        audio.src = state.audioUrl;
+        audio.onended = () => {
+          state.audioPlaying = false;
+          document.getElementById('audio-play-icon').innerHTML = '<path d="M8 5v14l11-7z"/>';
+          document.getElementById('audio-play-label').textContent = 'Play';
+        };
+      }
+
+      // ASR source badge
+      const badge = document.getElementById('asr-source-badge');
+      if (state.sentenceAnchors?.length) {
+        badge.textContent = `ASR: ${state.sentenceAnchors.length} segments`;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+
+      // Render sentence markers
+      renderSentenceMarkers();
+    }
+
+    function renderSentenceMarkers() {
+      const container = document.getElementById('sentence-markers');
+      const anchors = state.sentenceAnchors;
+      const duration = state.plan?.duration || 30;
+      if (!anchors || !anchors.length) {
+        container.innerHTML = '';
+        return;
+      }
+
+      container.innerHTML = anchors.map((a, i) => {
+        // anchors use startSec/endSec (seconds)
+        const left = (a.startSec / duration) * 100;
+        const width = ((a.endSec - a.startSec) / duration) * 100;
+        const hue = (i * 37) % 360;
+        return `<div class="absolute top-1 bottom-1 rounded-sm opacity-40 hover:opacity-70 transition-opacity"
+                     style="left:${left.toFixed(2)}%;width:${Math.max(width, 0.5).toFixed(2)}%;background:hsl(${hue},60%,70%);"
+                     title="${escHtml(a.text || '')} [${a.startSec.toFixed(1)}s-${a.endSec.toFixed(1)}s]"></div>`;
+      }).join('');
+    }
+
+    function toggleAudioPlayback() {
+      const audio = document.getElementById('timeline-audio');
+      if (!audio.src) return;
+
+      if (audio.paused) {
+        audio.play();
+        state.audioPlaying = true;
+        document.getElementById('audio-play-icon').innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+        document.getElementById('audio-play-label').textContent = 'Pause';
+        requestAnimationFrame(updatePlayhead);
+      } else {
+        audio.pause();
+        state.audioPlaying = false;
+        document.getElementById('audio-play-icon').innerHTML = '<path d="M8 5v14l11-7z"/>';
+        document.getElementById('audio-play-label').textContent = 'Play';
+      }
+    }
+
+    function updatePlayhead() {
+      const audio = document.getElementById('timeline-audio');
+      if (!audio || audio.paused) return;
+
+      const dur = (audio.duration && isFinite(audio.duration)) ? audio.duration : 0;
+      const pct = dur ? (audio.currentTime / dur) * 100 : 0;
+      document.getElementById('audio-playhead').style.left = pct + '%';
+
+      // Update time display
+      const fmt = (t) => {
+        if (!isFinite(t) || isNaN(t)) return '0:00';
+        return `${Math.floor(t/60)}:${String(Math.floor(t%60)).padStart(2,'0')}`;
+      };
+      document.getElementById('audio-time-display').textContent = `${fmt(audio.currentTime)} / ${fmt(dur)}`;
+
+      requestAnimationFrame(updatePlayhead);
+    }
+
+    function seekAudio(event) {
+      const audio = document.getElementById('timeline-audio');
+      if (!audio.src || !audio.duration || !isFinite(audio.duration)) return;
+      const track = document.getElementById('audio-track');
+      const rect = track.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+      audio.currentTime = pct * audio.duration;
+      document.getElementById('audio-playhead').style.left = (pct * 100) + '%';
+    }
+
+    function renderEmphasisEditor() {
+      const container = document.getElementById('emphasis-editor');
+      const plan = state.plan;
+
+      // Picker mode hint
+      if (state.emphasisPickerMode) {
+        const ocrCount = state.detection?.ocrLines?.length || 0;
+        const vlmCount = state.detection?.vlmBlocks?.length || 0;
+        container.innerHTML = `
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+            <p class="text-sm font-medium text-blue-700">Select a Detection Box</p>
+            <p class="text-xs text-blue-600">Click on a box in the image to add an emphasis.</p>
+            <div class="flex gap-2 mt-2">
+              <span class="badge bg-blue-100 text-blue-700 text-xs">OCR: ${ocrCount} boxes</span>
+              <span class="badge bg-pink-100 text-pink-700 text-xs">VLM: ${vlmCount} boxes</span>
+            </div>
+            <button class="btn btn-secondary text-xs w-full mt-2" onclick="addEmphasisDirect()">Or add manually (no box)</button>
+          </div>
+        `;
+        return;
+      }
+
+      if (!plan || !plan.emphases?.length) {
+        container.innerHTML = '<p class="text-sm text-gray-400">No emphases in plan</p>';
+        return;
+      }
+
+      const idx = state.selectedEmphasisIndex;
+      if (idx === null || idx < 0 || idx >= plan.emphases.length) {
+        container.innerHTML = '<p class="text-sm text-gray-400">Click an emphasis to edit</p>';
+        return;
+      }
+
+      const emp = plan.emphases[idx];
+      container.innerHTML = `
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="badge badge-${emp.type}">#${emp.order} ${emp.type}</span>
+            <button class="btn btn-danger text-xs py-1" onclick="removeEmphasis(${idx})">Delete</button>
+          </div>
+          <div>
+            <label class="label text-xs">Type</label>
+            <select class="input text-sm" onchange="state.plan.emphases[${idx}].type=this.value; renderPlanView();">
+              <option value="text-highlight" ${emp.type === 'text-highlight' ? 'selected' : ''}>Text Highlight</option>
+              <option value="glow-pulse" ${emp.type === 'glow-pulse' ? 'selected' : ''}>Glow Pulse</option>
+              <option value="keyword-chip" ${emp.type === 'keyword-chip' ? 'selected' : ''}>Keyword Chip</option>
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="label text-xs">Start (s)</label>
+              <input type="number" class="input text-sm" step="0.1" min="0" value="${emp.start}"
+                     onchange="state.plan.emphases[${idx}].start=parseFloat(this.value); renderPlanView();">
+            </div>
+            <div>
+              <label class="label text-xs">End (s)</label>
+              <input type="number" class="input text-sm" step="0.1" min="0" value="${emp.end}"
+                     onchange="state.plan.emphases[${idx}].end=parseFloat(this.value); renderPlanView();">
+            </div>
+          </div>
+          <div>
+            <label class="label text-xs">Keyword</label>
+            <input type="text" class="input text-sm" value="${escHtml(emp.keyword || '')}"
+                   onchange="state.plan.emphases[${idx}].keyword=this.value; renderPlanView();">
+          </div>
+          <div>
+            <label class="label text-xs">BBox [x, y, w, h] <span class="text-gray-400">(px)</span></label>
+            <div class="grid grid-cols-4 gap-1">
+              ${[0,1,2,3].map(j => {
+                const imgW = state.plan?.imageSize?.w || state.detection?.imageSize?.w || 1920;
+                const imgH = state.plan?.imageSize?.h || state.detection?.imageSize?.h || 1080;
+                const scale = (j === 0 || j === 2) ? imgW : imgH;
+                const pxVal = Math.round(emp.bboxNorm[j] * scale);
+                const maxVal = (j === 0 || j === 2) ? imgW : imgH;
+                return `<input type="number" class="input text-xs" step="1" min="0" max="${maxVal}"
+                       value="${pxVal}"
+                       onchange="state.plan.emphases[${idx}].bboxNorm[${j}]=parseFloat(this.value)/${scale}; renderPlanView();">`;
+              }).join('')}
+            </div>
+          </div>
+          <div>
+            <label class="label text-xs">Kind</label>
+            <span class="text-xs text-gray-500">${emp.kind} (confidence: ${emp.confidence})</span>
+          </div>
+          ${emp.scriptSlice ? `
+          <div>
+            <label class="label text-xs">Script Slice</label>
+            <p class="text-xs text-gray-500 bg-gray-50 p-2 rounded">${escHtml(emp.scriptSlice)}</p>
+          </div>` : ''}
+        </div>
+      `;
+    }
+
+    function addEmphasis() {
+      if (!state.plan) return;
+      if (!state.detection || (!state.detection.ocrLines?.length && !state.detection.vlmBlocks?.length)) {
+        // No detection data, fallback to direct add
+        addEmphasisDirect();
+        return;
+      }
+      // Enter picker mode: show detection boxes for selection
+      state.emphasisPickerMode = true;
+      state.selectedEmphasisIndex = null;
+      renderPlanView();
+      toast('Click a detection box to add emphasis', 'info');
+    }
+
+    function cancelEmphasisPicker() {
+      state.emphasisPickerMode = false;
+      renderPlanView();
+    }
+
+    function addEmphasisFromBox(source, index) {
+      // source: 'ocr' or 'vlm'
+      const duration = state.plan.duration || 30;
+      const lastEnd = state.plan.emphases.length > 0
+        ? Math.max(...state.plan.emphases.map(e => e.end))
+        : 0;
+      const newStart = Math.min(lastEnd + 1, duration - 2);
+
+      let bbox, keyword, kind, type, confidence;
+      if (source === 'ocr') {
+        const line = state.detection.ocrLines[index];
+        bbox = [...line.bboxNorm];
+        keyword = line.text?.slice(0, 40) || '';
+        kind = 'text';
+        type = 'text-highlight';
+        confidence = line.confidence || 0.8;
+      } else {
+        const block = state.detection.vlmBlocks[index];
+        bbox = [...block.bboxNorm];
+        keyword = block.description?.slice(0, 40) || '';
+        kind = 'block';
+        type = 'glow-pulse';
+        confidence = block.confidence || 0.8;
+      }
+
+      state.plan.emphases.push({
+        order: state.plan.emphases.length + 1,
+        start: newStart,
+        end: Math.min(newStart + 2, duration),
+        kind,
+        bboxNorm: bbox,
+        confidence,
+        type,
+        keyword,
+      });
+
+      state.emphasisPickerMode = false;
+      state.selectedEmphasisIndex = state.plan.emphases.length - 1;
+      renderPlanView();
+      toast(`Emphasis added from ${source.toUpperCase()} box`, 'success');
+    }
+
+    function addEmphasisDirect() {
+      const duration = state.plan.duration || 30;
+      const lastEnd = state.plan.emphases.length > 0
+        ? Math.max(...state.plan.emphases.map(e => e.end))
+        : 0;
+      const newStart = Math.min(lastEnd + 1, duration - 2);
+      state.plan.emphases.push({
+        order: state.plan.emphases.length + 1,
+        start: newStart,
+        end: Math.min(newStart + 2, duration),
+        kind: 'text',
+        bboxNorm: [0.1, 0.1, 0.3, 0.1],
+        confidence: 0.8,
+        type: 'text-highlight',
+        keyword: '',
+      });
+      state.selectedEmphasisIndex = state.plan.emphases.length - 1;
+      renderPlanView();
+    }
+
+    function removeEmphasis(i) {
+      state.plan.emphases.splice(i, 1);
+      state.plan.emphases.forEach((e, j) => e.order = j + 1);
+      state.selectedEmphasisIndex = null;
+      renderPlanView();
+    }
+
+    async function savePlan() {
+      if (!state.taskId || !state.plan) { toast('No plan to save', 'error'); return; }
+      try {
+        await api('PUT', `/api/v1/task/${state.taskId}/plan`, state.plan);
+        toast('Plan saved', 'success');
+      } catch (err) {
+        toast(`Save failed: ${err.message}`, 'error');
+      }
+    }
+
+    async function confirmPlan() {
+      if (!state.taskId || !state.plan) { toast('No plan to confirm', 'error'); return; }
+      await savePlan();
+      state.currentStep = 'plan';
+      goToStep('render');
+      generatePlayback();
+    }
+
+    async function generatePlayback() {
+      const spinner = document.getElementById('playback-spinner');
+      const statusText = document.getElementById('playback-status-text');
+      const video = document.getElementById('playback-player');
+      const placeholder = document.getElementById('playback-placeholder');
+
+      spinner.classList.remove('hidden');
+      statusText.textContent = 'Generating playback video...';
+
+      try {
+        const data = await api('POST', `/api/v1/task/${state.taskId}/playback`);
+        state.playbackUrl = data.playbackUrl;
+        video.src = data.playbackUrl;
+        video.load();
+        placeholder.classList.add('hidden');
+        video.classList.remove('hidden');
+        toast('Playback video ready', 'success');
+      } catch (err) {
+        spinner.classList.add('hidden');
+        statusText.textContent = `Failed: ${err.message}`;
+        toast(`Playback generation failed: ${err.message}`, 'error');
+      }
+    }
+
+    // ── Render ─────────────────────────────────────────────────
+    function renderPlanSummary() {
+      const container = document.getElementById('plan-summary');
+      if (!state.plan) {
+        container.innerHTML = '<p>No plan available</p>';
+        return;
+      }
+      const plan = state.plan;
+      container.innerHTML = `
+        <p>Duration: ${plan.duration}s</p>
+        <p>Emphases: ${plan.emphases?.length || 0}</p>
+        ${(plan.emphases || []).map(e =>
+          `<p class="ml-2">- #${e.order} ${e.type} [${e.start.toFixed(1)}s-${e.end.toFixed(1)}s] ${e.keyword || ''}</p>`
+        ).join('')}
+      `;
+    }
+
+    async function startRender() {
+      if (!state.taskId || !state.plan) {
+        toast('No plan available for rendering', 'error');
+        return;
+      }
+
+      // Save plan first
+      await savePlan();
+
+      const quality = document.getElementById('render-quality').value;
+      const btn = document.getElementById('btn-render');
+      const spinner = document.getElementById('render-spinner');
+      const statusText = document.getElementById('render-status-text');
+      const statusDetail = document.getElementById('render-status-detail');
+
+      btn.disabled = true;
+      spinner.classList.remove('hidden');
+      statusText.textContent = 'Rendering...';
+      statusDetail.textContent = 'This may take a few minutes';
+
+      try {
+        await api('POST', `/api/v1/task/${state.taskId}/render`, { quality });
+
+        // Start polling
+        if (state.pollTimer) clearInterval(state.pollTimer);
+        state.pollTimer = setInterval(() => pollRenderStatus(), 2000);
+      } catch (err) {
+        toast(`Render failed: ${err.message}`, 'error');
+        btn.disabled = false;
+        spinner.classList.add('hidden');
+        statusText.textContent = 'Render failed';
+        statusDetail.textContent = err.message;
+      }
+    }
+
+    async function pollRenderStatus() {
+      try {
+        const data = await api('GET', `/api/v1/task/${state.taskId}`);
+        const statusText = document.getElementById('render-status-text');
+        const statusDetail = document.getElementById('render-status-detail');
+        const spinner = document.getElementById('render-spinner');
+        const btn = document.getElementById('btn-render');
+
+        if (data.renderingStatus === 'done') {
+          clearInterval(state.pollTimer);
+          spinner.classList.add('hidden');
+          btn.disabled = false;
+          statusText.textContent = 'Render complete!';
+          statusDetail.textContent = data.renderElapsedMs ? `Took ${(data.renderElapsedMs / 1000).toFixed(1)}s` : '';
+
+          // Show emphasis video (right side)
+          const video = document.getElementById('emphasis-player');
+          const placeholder = document.getElementById('emphasis-placeholder');
+          video.src = data.mp4Url;
+          video.load();
+          placeholder.classList.add('hidden');
+          video.classList.remove('hidden');
+
+          // Download link
+          const dlLink = document.getElementById('download-link');
+          dlLink.href = data.mp4Url;
+          dlLink.classList.remove('hidden');
+
+          toast('Render complete!', 'success');
+        } else if (data.renderingStatus === 'failed') {
+          clearInterval(state.pollTimer);
+          spinner.classList.add('hidden');
+          btn.disabled = false;
+          statusText.textContent = 'Render failed';
+          statusDetail.textContent = data.renderError || 'Unknown error';
+          toast(`Render failed: ${data.renderError || 'Unknown error'}`, 'error');
+        } else {
+          statusText.textContent = 'Rendering...';
+          statusDetail.textContent = 'Please wait';
+        }
+      } catch (err) {
+        // Keep polling on transient errors
+      }
+    }
+
+    // ── Task List ──────────────────────────────────────────────
+    async function loadTasks() {
+      const sidebar = document.getElementById('task-sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      sidebar.classList.remove('translate-x-full');
+      overlay.classList.remove('hidden');
+
+      try {
+        const data = await api('GET', '/api/v1/tasks');
+        const list = document.getElementById('task-list');
+        if (!data.tasks?.length) {
+          list.innerHTML = '<p class="text-sm text-gray-400 text-center py-8">No tasks yet</p>';
+          return;
+        }
+        list.innerHTML = data.tasks.map(t => `
+          <div class="task-item ${t.taskId === state.taskId ? 'active' : ''}" onclick="loadTask('${t.taskId}')">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-medium text-gray-700 truncate">${t.taskId}</span>
+              <span class="badge ${getStatusBadgeClass(t.status)}">${t.status}</span>
+            </div>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="text-xs text-gray-400">${t.createdAt ? new Date(t.createdAt).toLocaleString() : ''}</span>
+              ${t.renderingStatus === 'done' ? '<span class="badge bg-green-100 text-green-700 text-xs">MP4</span>' : ''}
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        toast(`Failed to load tasks: ${err.message}`, 'error');
+      }
+    }
+
+    async function loadTask(taskId) {
+      try {
+        const data = await api('GET', `/api/v1/task/${taskId}`);
+        state.taskId = taskId;
+
+        // Restore input state (image, script, duration)
+        if (data.input) {
+          state.imagePath = data.input.imagePath || null;
+          state.scriptText = data.input.scriptText || '';
+          state.duration = data.input.duration || 0;
+          if (data.input.imagePath) {
+            const filename = data.input.imagePath.split('/').pop();
+            state.imageUrl = `/api/v1/uploads/${filename}`;
+          }
+          // Restore UI inputs
+          const scriptEl = document.getElementById('script-text');
+          if (scriptEl) scriptEl.value = state.scriptText;
+          const durEl = document.getElementById('duration-input');
+          if (durEl) durEl.value = state.duration;
+        }
+
+        // Restore audio / sentenceAnchors
+        if (data.tts && data.tts.audioUrl) {
+          state.audioUrl = data.tts.audioUrl;
+        } else if (data.input && data.input.audioUrl) {
+          state.audioUrl = data.input.audioUrl;
+        }
+        if (data.input && data.input.audioPath) {
+          state.audioPath = data.input.audioPath;
+        }
+        state.sentenceAnchors = data.sentenceAnchors || null;
+
+        // Load plan if available
+        if (data.plan) {
+          state.plan = data.plan;
+          unlockStep('plan');
+        }
+
+        // Try to load detection
+        try {
+          const detData = await api('GET', `/api/v1/task/${taskId}/detection`);
+          if (detData.detection) {
+            state.detection = detData.detection;
+            unlockStep('detect');
+          }
+        } catch (_) {}
+
+        closeSidebar();
+
+        // Restore step: bypass goToStep's step-by-step guard
+        if (data.renderingStatus === 'rendering') {
+          state.currentStep = 'plan';
+          goToStep('render');
+          if (state.pollTimer) clearInterval(state.pollTimer);
+          state.pollTimer = setInterval(() => pollRenderStatus(), 2000);
+        } else if (data.renderingStatus === 'done' && data.mp4Url) {
+          state.currentStep = 'plan';
+          goToStep('render');
+          // Show emphasis video
+          const video = document.getElementById('emphasis-player');
+          const placeholder = document.getElementById('emphasis-placeholder');
+          video.src = data.mp4Url;
+          video.load();
+          placeholder.classList.add('hidden');
+          video.classList.remove('hidden');
+          // Show playback video if available
+          if (data.playbackUrl) {
+            state.playbackUrl = data.playbackUrl;
+            const pbVideo = document.getElementById('playback-player');
+            const pbPlaceholder = document.getElementById('playback-placeholder');
+            pbVideo.src = data.playbackUrl;
+            pbVideo.load();
+            pbPlaceholder.classList.add('hidden');
+            pbVideo.classList.remove('hidden');
+          }
+          const dlLink = document.getElementById('download-link');
+          dlLink.href = data.mp4Url;
+          dlLink.classList.remove('hidden');
+        } else if (state.plan) {
+          state.currentStep = 'detect';
+          goToStep('plan');
+        } else if (state.detection) {
+          goToStep('detect');
+        }
+
+        toast(`Loaded task: ${taskId}`, 'info');
+      } catch (err) {
+        toast(`Failed to load task: ${err.message}`, 'error');
+      }
+    }
+
+    function closeSidebar() {
+      document.getElementById('task-sidebar').classList.add('translate-x-full');
+      document.getElementById('sidebar-overlay').classList.add('hidden');
+    }
+
+    function newTask() {
+      state.taskId = null;
+      state.imagePath = null;
+      state.imageUrl = null;
+      state.audioUrl = null;
+      state.audioPath = null;
+      state.scriptText = '';
+      state.duration = 0;
+      state.detection = null;
+      state.plan = null;
+      state.selectedOcrIndex = null;
+      state.selectedVlmIndex = null;
+      state.selectedEmphasisIndex = null;
+      state.emphasisPickerMode = false;
+      state.sentenceAnchors = null;
+      state.audioPlaying = false;
+      state.playbackUrl = null;
+      if (state.pollTimer) clearInterval(state.pollTimer);
+
+      // Stop timeline audio if playing
+      const tlAudio = document.getElementById('timeline-audio');
+      if (tlAudio) { tlAudio.pause(); tlAudio.src = ''; }
+
+      document.getElementById('script-text').value = '';
+      document.getElementById('duration').value = '';
+      document.getElementById('task-id-input').value = '';
+      document.getElementById('task-id-input').readOnly = false;
+      document.getElementById('task-id-input').classList.remove('bg-gray-50');
+      document.getElementById('btn-unlock-taskid').classList.add('hidden');
+      document.getElementById('task-id-lock-hint').textContent = '';
+      document.getElementById('char-count').textContent = '0 characters';
+      document.getElementById('audio-result').classList.add('hidden');
+      document.getElementById('tts-progress').classList.add('hidden');
+      document.getElementById('audio-input').value = '';
+      clearImage();
+
+      // Reset step nav
+      document.querySelectorAll('#step-nav button').forEach((btn, i) => {
+        btn.className = 'px-4 py-2 text-sm' + (i === 0 ? ' step-active' : ' step-disabled');
+      });
+
+      goToStep('upload');
+    }
+
+    // ── Utils ──────────────────────────────────────────────────
+    function escHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+
+    function getStatusBadgeClass(status) {
+      const map = {
+        'ready': 'bg-green-100 text-green-700',
+        'detected': 'bg-blue-100 text-blue-700',
+        'pending': 'bg-yellow-100 text-yellow-700',
+        'detecting': 'bg-yellow-100 text-yellow-700',
+        'planning': 'bg-yellow-100 text-yellow-700',
+        'failed': 'bg-red-100 text-red-700',
+        'detect_failed': 'bg-red-100 text-red-700',
+        'plan_failed': 'bg-red-100 text-red-700',
+      };
+      return map[status] || 'bg-gray-100 text-gray-700';
+    }
+
+    // ── Init ───────────────────────────────────────────────────
+    initDropZone();
+    updateStartButton();
+    updateTTSButton();
+  </script>
+</body>
+</html>
